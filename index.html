@@ -324,6 +324,16 @@ async function enrichTwapGroup(key,g,forceRefresh=false){
 }
 
 
+function fmtCountdown(ms){
+  if(ms<=0)return'Selesai';
+  const h=Math.floor(ms/3600000);
+  const m=Math.floor((ms%3600000)/60000);
+  const s=Math.floor((ms%60000)/1000);
+  if(h>0)return h+'j '+m+'m '+s+'s';
+  if(m>0)return m+'m '+s+'s';
+  return s+'s';
+}
+
 function renderTWAP(){
   const el=document.getElementById('twap-content');
   const now=Date.now();
