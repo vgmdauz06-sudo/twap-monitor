@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -318,6 +317,8 @@ async function enrichTwapGroup(key,g,forceRefresh=false){
         twapId:match.twapId,
         isActiveOnChain:isActive,
       };
+      // Re-render setelah data blockchain tersedia
+      renderTWAP();
     }
   }catch(e){console.error('enrichTwapGroup:',e);}
 }
@@ -360,18 +361,17 @@ function renderTWAP(){
       const displayNtl=g.executedNtl>0?g.executedNtl:(g.totalSz*avgPx);
       execStr=fmt(displayExec)+' '+name;
       planStr=fmt(g.plannedSz||g.totalSz)+' '+name;
-      const totalNtl=parseFloat(g.plannedSz||g.totalSz)*avgPx;
-      totalStr='$'+fmtU(totalNtl);
+      totalStr='$'+fmtU(displayNtl);
       durationStr=g.minutes+'m total';
     } else {
       const durMs=now-g.firstTime;
       progPct=Math.min(100,durMs/3600000*100);
       const durMin=Math.floor(durMs/60000);
       const durSec=Math.floor((durMs%60000)/1000);
-      remainStr='~'+(durMin>0?durMin+'m ':'')+durSec+'s';
+      remainStr=''+(durMin>0?durMin+'m ':'')+durSec+'s';
       pctStr='fetching...';
       execStr=fmt(g.totalSz)+' '+name;
-      planStr='—';
+      planStr='fetching...';
       totalStr='$'+fmtU(g.totalSz*avgPx);
       durationStr='';
     }
