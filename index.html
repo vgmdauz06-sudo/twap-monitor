@@ -35,8 +35,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--m
 .fa:hover{border-color:#26a69a;color:#26a69a}
 .fa.apply{border-color:rgba(38,166,154,0.5);color:#26a69a}
 .main-content{flex:1;overflow-y:auto;padding:0}
-.twap-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px;padding:8px}
-.twap-card{background:rgba(4,7,12,0.8);border:1px solid rgba(30,80,120,0.3);border-radius:6px;padding:10px 12px}
+.twap-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:8px;padding:8px;align-content:start}
+.twap-card{background:rgba(4,7,12,0.8);border:1px solid rgba(30,80,120,0.3);border-radius:6px;padding:10px 12px;min-width:0}
 .twap-card.buy{border-left:3px solid #26a69a}
 .twap-card.sell{border-left:3px solid #ff2255}
 .twap-card.inactive{opacity:.5}
@@ -268,25 +268,40 @@ async function fetchTwapHistory(wallet, forceRefresh=false){
   }catch(e){return null;}
 }
 
+// Map coin HL ke token index untuk matching di twapHistory
+const COIN_TO_TOKEN={
+  'PURR/USDC':'PURR/USDC','@107':'@107','@334':'@334',
+  '@1':'@1','@59':'@59','@240':'@240','@130':'@130',
+  '@160':'@160','@242':'@242','@85':'@85','@5':'@5',
+  '@184':'@184','@188':'@188','@261':'@261','@162':'@162',
+  '@335':'@335','@206':'@206','@284':'@284'
+};
+
 async function enrichTwapGroup(key,g,forceRefresh=false){
   try{
     const history=await fetchTwapHistory(g.wallet,forceRefresh);
     if(!history||!history.length)return;
-    // Cari TWAP yang matching coin dan side, status activated, paling baru
-    const match=history
-      .filter(h=>h.state&&h.state.coin===g.coin&&h.state.side===g.side)
-      .sort((a,b)=>b.state.timestamp-a.state.timestamp)[0];
+
+    // Prioritas: cari yang status=activated dulu, kalau tidak ada ambil paling baru
+    const candidates=history
+      .filter(h=>h.state&&h.state.coin===g.coin&&h.state.side===g.side);
+    if(!candidates.length)return;
+
+    const activated=candidates.find(h=>h.status?.status==='activated');
+    const match=activated||candidates.sort((a,b)=>b.state.timestamp-a.state.timestamp)[0];
     if(!match)return;
+
     const state=match.state;
-    const startMs=state.timestamp; // sudah dalam ms
+    const startMs=state.timestamp;
     const durationMs=state.minutes*60*1000;
     const endMs=startMs+durationMs;
     const totalPlanned=parseFloat(state.sz);
-    const executed=parseFloat(state.executedSz||0);
-    const executedNtl=parseFloat(state.executedNtl||0);
+    // executedSz dari blockchain, fallback ke WebSocket totalSz
+    const executed=parseFloat(state.executedSz)||0;
+    const executedNtl=parseFloat(state.executedNtl)||0;
     const pct=totalPlanned>0?(executed/totalPlanned*100):0;
     const isActive=match.status?.status==='activated';
-    // Update group dengan data akurat dari blockchain
+
     if(twapGroups[key]){
       twapGroups[key]={
         ...twapGroups[key],
@@ -340,7 +355,9 @@ function renderTWAP(){
       progPct=Math.min(100,elapsed/g.durationMs*100);
       remainStr=fmtCountdown(remainMs);
       pctStr=(g.pctDone||0).toFixed(1)+'%';
-      execStr=fmt(g.executedSz||g.totalSz)+' '+name;
+      const displayExec=g.executedSz>0?g.executedSz:g.totalSz;
+      const displayNtl=g.executedNtl>0?g.executedNtl:(g.totalSz*avgPx);
+      execStr=fmt(displayExec)+' '+name;
       planStr=fmt(g.plannedSz||g.totalSz)+' '+name;
       const totalNtl=parseFloat(g.plannedSz||g.totalSz)*avgPx;
       totalStr='$'+fmtU(totalNtl);
