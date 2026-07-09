@@ -202,11 +202,21 @@ function showAlert(name,side,sz,px){
 
 function isZeroHash(h){
   if(!h)return false;
-  return h.replace('0x','').replace(/0/g,'')==='';
+  // Hash TWAP Hyperliquid = 64 karakter 0 setelah 0x
+  const clean=h.toLowerCase().replace('0x','');
+  return clean.length===64&&/^0+$/.test(clean);
 }
 
 function processTrade(t){
   if(!t||!t.coin||!active.has(t.coin))return;
+  // Debug: log semua field trade untuk 5 trade pertama
+  if(twapC<5||isZeroHash(t.hash)){
+    console.log('TRADE DEBUG:',JSON.stringify({
+      coin:t.coin,hash:t.hash,side:t.side,
+      sz:t.sz,px:t.px,tid:t.tid,
+      keys:Object.keys(t)
+    }));
+  }
   if(!isZeroHash(t.hash))return;
   const name=COINS[t.coin]||t.coin;
   const isBuy=t.side==='B';
