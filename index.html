@@ -387,8 +387,8 @@ function renderTWAP(){
     }
 
     return'<div class="twap-card '+(isBuy?'buy':'sell')+(g.isActive?'':' inactive')+'">'
-      // Header: side + coin + status
-      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
+      // Header
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">'
         +'<div style="display:flex;align-items:center;gap:6px">'
           +'<div class="side-dot '+(isBuy?'buy':'sell')+'" style="'+(g.isActive?'box-shadow:0 0 5px '+col:'')+'"></div>'
           +'<span class="side-label '+(isBuy?'buy':'sell')+'" style="font-size:13px">'+(isBuy?'BUY':'SELL')+'</span>'
@@ -396,20 +396,31 @@ function renderTWAP(){
         +'</div>'
         +'<span style="font-size:9px;color:'+(g.isActive?'#f59e0b':'var(--text3)')+'">'+(g.isActive?'● Aktif':'○ Selesai')+'</span>'
       +'</div>'
-      // Wallet
-      +'<a href="https://hypurrscan.io/address/'+g.wallet+'#spot" target="_blank" style="font-size:10px;color:var(--text3);text-decoration:none;display:block;margin-bottom:7px">'+shortW+' ↗</a>'
-      // Info row: exec/plan, countdown, slices
-      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-bottom:7px">'
+      // Wallet + slices info
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+        +'<a href="https://hypurrscan.io/address/'+g.wallet+'#spot" target="_blank" style="font-size:10px;color:var(--text3);text-decoration:none">'+shortW+' ↗</a>'
+        +'<span style="font-size:10px;color:var(--text3)">'+g.count+'x slices &nbsp;'+durationStr+'&nbsp; <span style="color:#f59e0b;font-weight:600">'+remainStr+'</span></span>'
+      +'</div>'
+      // Stats grid 2x2
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-bottom:6px">'
         +'<div style="font-size:9px;color:var(--text3)">Executed<div style="font-size:11px;color:#00ffaa;margin-top:1px">'+execStr+'</div></div>'
         +'<div style="font-size:9px;color:var(--text3)">Planned<div style="font-size:11px;color:var(--text);margin-top:1px">'+planStr+'</div></div>'
-        +'<div style="font-size:9px;color:var(--text3)">Total Value<div style="font-size:11px;color:#00ffaa;margin-top:1px">'+totalStr+'</div></div>'
+        +'<div style="font-size:9px;color:var(--text3)">Avg/Slice<div style="font-size:11px;color:var(--text2);margin-top:1px">~$'+fmtU(g.avgSz*avgPx)+' / slice</div></div>'
         +'<div style="font-size:9px;color:var(--text3)">Last Px<div style="font-size:11px;color:'+(isBuy?'#26a69a':'#ff2255')+';margin-top:1px">$'+avgPx.toFixed(5)+'</div></div>'
-        +'<div style="font-size:9px;color:var(--text3)">Slices<div style="font-size:11px;color:var(--text);margin-top:1px">'+g.count+'x ~'+Math.round(avgInt/1000)+'s</div></div>'
-        +'<div style="font-size:9px;color:var(--text3)">'+(g.endMs?'Sisa':'Durasi')+'<div style="font-size:11px;color:#f59e0b;font-weight:600;margin-top:1px">'+remainStr+'</div></div>'
       +'</div>'
-      // Progress bar
+      // Total Order / Sudah Eksekusi / Sisa (seperti terminal_ff)
+      +(g.endMs?
+        '<div style="background:var(--bg2);border-radius:4px;padding:6px 8px;margin-bottom:6px;font-size:10px">'
+          +'<div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="color:var(--text3)">Total Order</span><span style="color:var(--text)">$'+fmtU(parseFloat(g.plannedSz||g.totalSz)*avgPx)+'</span></div>'
+          +'<div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="color:var(--text3)">Sudah Eksekusi</span><span style="color:#00ffaa">$'+fmtU(g.executedNtl>0?g.executedNtl:g.totalSz*avgPx)+'</span></div>'
+          +'<div style="display:flex;justify-content:space-between"><span style="color:var(--text3)">Sisa</span><span style="color:#f59e0b;font-weight:600">$'+fmtU(Math.max(0,parseFloat(g.plannedSz||g.totalSz)*avgPx-(g.executedNtl>0?g.executedNtl:g.totalSz*avgPx)))+'</span></div>'
+        +'</div>'
+        :'<div style="background:var(--bg2);border-radius:4px;padding:5px 8px;margin-bottom:6px;font-size:9px;color:var(--text3)">Mengambil data blockchain...</div>'
+      )
+      // Progress
       +'<div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text3);margin-bottom:3px">'
-        +'<span>'+pctStr+'</span><span>'+durationStr+'</span>'
+        +'<span>'+(g.endMs?fmt(g.executedSz>0?g.executedSz:g.totalSz)+' / '+fmt(g.plannedSz||g.totalSz)+' '+name:'')+'</span>'
+        +'<span style="color:'+(progPct>0?'#26a69a':'var(--text3)')+'">'+pctStr+'</span>'
       +'</div>'
       +'<div class="prog-wrap"><div class="prog-fill '+(isBuy?'':'sell')+'" style="width:'+progPct.toFixed(1)+'%;transition:width 1s linear"></div></div>'
       +'</div>';
