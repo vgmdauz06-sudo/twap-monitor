@@ -238,18 +238,21 @@ function processTrade(t){
 
   log('['+ts()+'] ⚡ TWAP '+(isBuy?'▲ BUY ':'▼ SELL')+'  '+name.padEnd(8)+'  sz: '+fmt(sz).padStart(12)+'  px: $'+parseFloat(t.px).toFixed(6),(isBuy?'buy':'sell'));
   showAlert(name,t.side,sz,t.px);
-  // Fetch data blockchain untuk enrichment (async, tidak block render)
-  enrichTwapGroup(key,twapGroups[key]);
+  // Fetch data blockchain — force refresh setiap slice baru untuk akurasi
+  enrichTwapGroup(key,twapGroups[key],true);
   switchTab('twap');
   renderTWAP();
 }
 
-// Cache twapHistory per wallet untuk hindari fetch berulang
+// Cache twapHistory per wallet
 const twapHistoryCache={};
 
-async function fetchTwapHistory(wallet){
-  if(twapHistoryCache[wallet]&&Date.now()-twapHistoryCache[wallet].fetchTime<30000){
-    return twapHistoryCache[wallet].data;
+async function fetchTwapHistory(wallet, forceRefresh=false){
+  const cached=twapHistoryCache[wallet];
+  // Cache 5 detik untuk TWAP aktif, 60 detik untuk yang sudah selesai
+  const ttl=cached&&cached.hasActive?5000:60000;
+  if(!forceRefresh&&cached&&Date.now()-cached.fetchTime<ttl){
+    return cached.data;
   }
   try{
     const r=await fetch('https://api.hyperliquid.xyz/info',{
@@ -257,41 +260,49 @@ async function fetchTwapHistory(wallet){
       body:JSON.stringify({type:'twapHistory',user:wallet})
     });
     const data=await r.json();
-    twapHistoryCache[wallet]={data,fetchTime:Date.now()};
+    // Cek apakah ada TWAP aktif
+    const hasActive=Array.isArray(data)&&data.some(d=>d.status?.status==='activated');
+    twapHistoryCache[wallet]={data,fetchTime:Date.now(),hasActive};
     return data;
   }catch(e){return null;}
 }
 
-async function enrichTwapGroup(key,g){
+async function enrichTwapGroup(key,g,forceRefresh=false){
   try{
-    const history=await fetchTwapHistory(g.wallet);
+    const history=await fetchTwapHistory(g.wallet,forceRefresh);
     if(!history||!history.length)return;
-    // Cari TWAP yang matching coin dan side, paling baru
+    // Cari TWAP yang matching coin dan side, status activated, paling baru
     const match=history
       .filter(h=>h.state&&h.state.coin===g.coin&&h.state.side===g.side)
-      .sort((a,b)=>b.time-a.time)[0];
+      .sort((a,b)=>b.state.timestamp-a.state.timestamp)[0];
     if(!match)return;
     const state=match.state;
-    const startMs=state.timestamp; // timestamp dalam ms
+    const startMs=state.timestamp; // sudah dalam ms
     const durationMs=state.minutes*60*1000;
     const endMs=startMs+durationMs;
     const totalPlanned=parseFloat(state.sz);
     const executed=parseFloat(state.executedSz||0);
+    const executedNtl=parseFloat(state.executedNtl||0);
     const pct=totalPlanned>0?(executed/totalPlanned*100):0;
-    // Update group dengan data dari blockchain
-    twapGroups[key]={
-      ...twapGroups[key],
-      plannedSz:totalPlanned,
-      executedSz:executed,
-      pctDone:pct,
-      startMs,
-      endMs,
-      durationMs,
-      minutes:state.minutes,
-      status:match.status?.status||'unknown',
-      twapId:match.twapId
-    };
-  }catch(e){}
+    const isActive=match.status?.status==='activated';
+    // Update group dengan data akurat dari blockchain
+    if(twapGroups[key]){
+      twapGroups[key]={
+        ...twapGroups[key],
+        plannedSz:totalPlanned,
+        executedSz:executed,
+        executedNtl,
+        pctDone:pct,
+        startMs,
+        endMs,
+        durationMs,
+        minutes:state.minutes,
+        status:match.status?.status||'unknown',
+        twapId:match.twapId,
+        isActiveOnChain:isActive,
+      };
+    }
+  }catch(e){console.error('enrichTwapGroup:',e);}
 }
 
 
@@ -330,7 +341,7 @@ function renderTWAP(){
         +'</div>';
       sizeHtml='<div class="stat-box"><div class="stat-label">Executed</div><div class="stat-val up">'+fmt(g.executedSz||g.totalSz)+' '+name+'</div></div>'
         +'<div class="stat-box"><div class="stat-label">Planned</div><div class="stat-val">'+fmt(g.plannedSz||g.totalSz)+' '+name+'</div></div>'
-        +'<div class="stat-box"><div class="stat-label">Total Value</div><div class="stat-val up">$'+fmtU(totalUsd)+'</div></div>'
+        +'<div class="stat-box"><div class="stat-label">Value Executed</div><div class="stat-val up">$'+fmtU(g.executedNtl||totalUsd)+'</div></div>'
         +'<div class="stat-box"><div class="stat-label">Last Price</div><div class="stat-val '+(isBuy?'buy':'sell')+'">$'+avgPx.toFixed(6)+'</div></div>';
     } else {
       // Fallback WebSocket — estimasi
