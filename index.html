@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TWAP Detector — Hyperliquid</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Rajdhani:wght@600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#04030a;--bg2:#070510;--bg3:#0a0718;--border:rgba(30,80,140,0.4);--border2:#244060;--text:#c8d8e8;--text2:#6a8aaa;--text3:#3a5070;--up:#00ffaa;--down:#ff2255;--mono:'JetBrains Mono',monospace;--sans:'Rajdhani',sans-serif}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:12px;overflow:hidden}
+.wrap{display:flex;flex-direction:column;height:100vh}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:7px 14px;background:rgba(4,6,12,0.9);border-bottom:1px solid var(--border);flex-shrink:0}
+.logo{font-family:var(--sans);font-weight:700;font-size:13px;color:var(--text);display:flex;align-items:center;gap:8px}
+.logo-dot{width:7px;height:7px;border-radius:50%;background:#26a69a;box-shadow:0 0 6px #26a69a;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.ws-badges{display:flex;gap:8px;align-items:center}
+.ws-badge{font-size:10px;padding:2px 8px;border-radius:3px;border:1px solid var(--text3);color:var(--text3)}
+.ws-badge.live{border-color:#26a69a;color:#26a69a}
+.clock{font-size:11px;color:var(--text3)}
+.tabs{display:flex;border-bottom:1px solid var(--border);background:rgba(4,5,10,0.6);flex-shrink:0}
+.tab{padding:6px 14px;font-size:11px;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+.tab:hover{color:var(--text2)}
+.tab.active{color:var(--text);border-bottom-color:#26a69a}
+.panel{display:none;flex:1;overflow:hidden;flex-direction:column}
+.panel.active{display:flex}
+.filter-wrap{padding:8px 12px;border-bottom:1px solid var(--border);background:rgba(4,5,10,0.4)}
+.filter-row{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:5px}
+.filter-row:last-child{margin-bottom:0}
+.glabel{font-size:9px;color:var(--text3);min-width:62px;text-transform:uppercase;letter-spacing:.5px}
+.cbtn{background:rgba(10,20,40,0.5);border:1px solid var(--text3);color:var(--text3);border-radius:3px;padding:2px 8px;font-size:10px;cursor:pointer;font-family:var(--mono);transition:all .15s}
+.cbtn.on{background:rgba(38,166,154,0.1);border-color:#26a69a;color:#26a69a}
+.cbtn:hover{border-color:var(--text2);color:var(--text2)}
+.faction{display:flex;gap:5px;margin-top:6px}
+.fa{background:transparent;border:1px solid var(--text3);color:var(--text3);border-radius:3px;padding:2px 9px;font-size:10px;cursor:pointer;font-family:var(--mono);transition:all .15s}
+.fa:hover{border-color:#26a69a;color:#26a69a}
+.fa.apply{border-color:rgba(38,166,154,0.5);color:#26a69a}
+.main-content{flex:1;overflow-y:auto;padding:8px}
+.twap-card{background:rgba(4,7,12,0.65);border:1px solid rgba(30,80,120,0.3);border-radius:5px;padding:10px 12px;margin-bottom:8px}
+.twap-card.buy{border-left:3px solid #26a69a}
+.twap-card.sell{border-left:3px solid #ff2255}
+.twap-card.inactive{opacity:.55}
+.card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.card-side{display:flex;align-items:center;gap:7px}
+.side-dot{width:7px;height:7px;border-radius:50%}
+.side-dot.buy{background:#26a69a}
+.side-dot.sell{background:#ff2255}
+.side-label{font-family:var(--sans);font-weight:700;font-size:14px}
+.side-label.buy{color:#26a69a}
+.side-label.sell{color:#ff2255}
+.coin-tag{font-size:10px;color:var(--text3)}
+.card-wallet{font-size:10px;color:var(--text3);margin-bottom:8px;cursor:pointer;font-family:var(--mono);text-decoration:none;display:block}
+.card-wallet:hover{color:var(--text2)}
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px}
+.stat-box{background:var(--bg2);border-radius:3px;padding:5px 7px}
+.stat-label{font-size:9px;color:var(--text3)}
+.stat-val{font-size:12px;color:var(--text);margin-top:1px}
+.stat-val.up{color:#00ffaa}
+.stat-val.buy{color:#26a69a}
+.stat-val.sell{color:#ff2255}
+.stat-box.full{grid-column:1/-1}
+.timing-row{display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-bottom:6px}
+.timing-row span{color:#f59e0b}
+.prog-wrap{background:rgba(10,20,40,0.4);border-radius:3px;height:4px}
+.prog-fill{height:100%;border-radius:3px;background:#26a69a}
+.prog-fill.sell{background:#ff2255}
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;height:200px;color:var(--text3);font-size:11px;gap:8px;text-align:center}
+.log-wrap{flex:1;overflow-y:auto;padding:8px 12px}
+.log-line{font-size:11px;line-height:1.8;white-space:pre-wrap;word-break:break-all}
+.log-line.sys{color:var(--text3)}
+.log-line.info{color:#26a69a}
+.log-line.buy{color:#26a69a;font-weight:500}
+.log-line.sell{color:#ff2255;font-weight:500}
+.log-line.warn{color:#f59e0b}
+.log-line.err{color:#ff2255}
+.alert-bar{display:none;padding:5px 14px;font-size:11px;flex-shrink:0}
+.alert-bar.buy{background:rgba(38,166,154,0.08);border-bottom:1px solid rgba(38,166,154,0.3);color:#26a69a}
+.alert-bar.sell{background:rgba(255,34,85,0.08);border-bottom:1px solid rgba(255,34,85,0.3);color:#ff2255}
+.alert-bar.show{display:block}
+.bottombar{display:flex;align-items:center;justify-content:space-between;padding:5px 14px;background:rgba(7,5,16,.95);border-top:1px solid var(--border);font-size:10px;color:var(--text3);flex-shrink:0;flex-wrap:wrap;gap:4px}
+.bcnt{color:var(--text2)}
+.bcnt b{font-weight:500}
+.bclear{background:transparent;border:1px solid var(--text3);color:var(--text3);border-radius:3px;padding:2px 8px;font-size:10px;cursor:pointer;font-family:var(--mono);transition:all .15s}
+.bclear:hover{border-color:#ff2255;color:#ff2255}
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="logo"><div class="logo-dot"></div>TWAP Detector — Hyperliquid</div>
+    <div class="ws-badges">
+      <div class="ws-badge" id="ws1-badge">WS1 off</div>
+      <div class="ws-badge" id="ws2-badge">WS2 off</div>
+    </div>
+    <div class="clock" id="clk">--:--:--</div>
+  </div>
+  <div class="tabs">
+    <div class="tab active" data-t="twap">⚡ TWAP Live</div>
+    <div class="tab" data-t="log">Log</div>
+    <div class="tab" data-t="filter">Filter Coin</div>
+  </div>
+  <div id="alert-bar" class="alert-bar buy"></div>
+  <div class="panel active" id="panel-twap">
+    <div class="main-content" id="twap-content">
+      <div class="empty-state"><div style="font-size:28px">🔍</div><div>Menunggu TWAP...</div><div style="font-size:10px">Hash 0x000 terdeteksi otomatis</div></div>
+    </div>
+  </div>
+  <div class="panel" id="panel-log"><div class="log-wrap" id="log-out"></div></div>
+  <div class="panel" id="panel-filter">
+    <div class="filter-wrap">
+      <div class="filter-row">
+        <span class="glabel">Bot aktif</span>
+        <button class="cbtn on" data-coin="@334" data-name="KNTQ">KNTQ</button>
+        <button class="cbtn on" data-coin="PURR/USDC" data-name="PURR">PURR</button>
+        <button class="cbtn on" data-coin="@1" data-name="HFUN">HFUN</button>
+        <button class="cbtn on" data-coin="@59" data-name="CATBAL">CATBAL</button>
+        <button class="cbtn on" data-coin="@240" data-name="KITTEN">KITTEN</button>
+        <button class="cbtn on" data-coin="@130" data-name="BEATS">BEATS</button>
+        <button class="cbtn on" data-coin="@160" data-name="BUDDY">BUDDY</button>
+        <button class="cbtn on" data-coin="HYPE/USDC" data-name="HYPE">HYPE</button>
+        <button class="cbtn on" data-coin="@242" data-name="SWAP">SWAP</button>
+        <button class="cbtn on" data-coin="@85" data-name="PIP">PIP</button>
+      </div>
+      <div class="filter-row">
+        <span class="glabel">Lainnya</span>
+        <button class="cbtn on" data-coin="@5" data-name="JEFF">JEFF</button>
+        <button class="cbtn on" data-coin="@184" data-name="HPENGU">HPENGU</button>
+        <button class="cbtn on" data-coin="@188" data-name="UPUMP">UPUMP</button>
+        <button class="cbtn on" data-coin="@261" data-name="HAR">HAR</button>
+        <button class="cbtn on" data-coin="@162" data-name="UFART">UFART</button>
+        <button class="cbtn on" data-coin="@335" data-name="HPL">HPL</button>
+        <button class="cbtn on" data-coin="@206" data-name="UENA">UENA</button>
+        <button class="cbtn on" data-coin="@284" data-name="QONE">QONE</button>
+      </div>
+      <div class="faction">
+        <button class="fa" id="fa-all">pilih semua</button>
+        <button class="fa" id="fa-none">hapus semua</button>
+        <button class="fa apply" id="fa-apply">terapkan ✓</button>
+      </div>
+    </div>
+  </div>
+  <div class="bottombar">
+    <span id="bs-conn" style="color:var(--text3)">● menghubungkan...</span>
+    <span class="bcnt">TWAP: <b id="bs-twap" style="color:#f59e0b">0</b></span>
+    <span class="bcnt">BUY: <b id="bs-buy" style="color:#26a69a">0</b></span>
+    <span class="bcnt">SELL: <b id="bs-sell" style="color:#ff2255">0</b></span>
+    <span class="bcnt">Monitor: <b id="bs-mon" style="color:#6a8aaa">0</b></span>
+    <button class="bclear" id="bclear">clear log</button>
+  </div>
+</div>
+<script>
+const COINS={
+  '@334':'KNTQ','PURR/USDC':'PURR','@1':'HFUN','@59':'CATBAL',
+  '@240':'KITTEN','@130':'BEATS','@160':'BUDDY','HYPE/USDC':'HYPE',
+  '@242':'SWAP','@85':'PIP','@5':'JEFF','@184':'HPENGU',
+  '@188':'UPUMP','@261':'HAR','@162':'UFART','@335':'HPL',
+  '@206':'UENA','@284':'QONE'
+};
+let active=new Set(Object.keys(COINS));
+let alT=null,twapC=0,buyC=0,sellC=0;
+const twapGroups={};
+
+// Split coin ke 2 grup — masing-masing ~9-10 coin per WebSocket
+// WS1: 8 coin pertama (tanpa HYPE)
+// WS2: sisanya termasuk HYPE/USDC yang paling penting
+const COINS_ARR=Object.keys(COINS);
+const GROUP1=COINS_ARR.filter(c=>c!=='HYPE/USDC').slice(0,8);
+const GROUP2=[...COINS_ARR.filter(c=>c==='HYPE/USDC'),...COINS_ARR.filter(c=>c!=='HYPE/USDC').slice(8)];
+
+let ws1=null,ws2=null;
+let r1=0,r2=0,p1=null,p2=null;
+let alive1=false,alive2=false;
+
+function ts(){return new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}
+function fmt(n){return Number(parseFloat(n)).toLocaleString('id-ID',{minimumFractionDigits:0,maximumFractionDigits:2});}
+function fmtU(n){return Number(parseFloat(n)).toLocaleString('id-ID',{minimumFractionDigits:2,maximumFractionDigits:2});}
+setInterval(()=>{document.getElementById('clk').textContent=ts();},1000);
+
+function updateConnStatus(){
+  const el=document.getElementById('bs-conn');
+  if(alive1&&alive2){el.textContent='● connected (2 WS)';el.style.color='#26a69a';}
+  else if(alive1||alive2){el.textContent='● partial (1/2 WS)';el.style.color='#f59e0b';}
+  else{el.textContent='● disconnected';el.style.color='var(--text3)';}
+}
+
+function log(text,cls='sys'){
+  const lo=document.getElementById('log-out');
+  const d=document.createElement('div');
+  d.className='log-line '+cls;d.textContent=text;
+  lo.appendChild(d);lo.scrollTop=lo.scrollHeight;
+  if(lo.children.length>600)lo.removeChild(lo.firstChild);
+}
+
+function showAlert(name,side,sz,px){
+  const isBuy=side==='B';
+  const ab=document.getElementById('alert-bar');
+  ab.className='alert-bar show '+(isBuy?'buy':'sell');
+  ab.textContent='⚡ TWAP '+(isBuy?'▲ BUY':'▼ SELL')+'  '+name+'  |  sz: '+fmt(sz)+'  |  px: $'+parseFloat(px).toFixed(6)+'  |  '+ts();
+  if(alT)clearTimeout(alT);
+  alT=setTimeout(()=>ab.classList.remove('show'),8000);
+}
+
+const ZERO_HASH='0x'+'0'.repeat(64);
+
+function isTWAP(t){
+  if(!t||!t.hash)return false;
+  // Hash harus exact 64 nol
+  if(t.hash!==ZERO_HASH)return false;
+  // Filter wallet dummy 0xeeee...eeee (Spot Dust Conversion)
+  const isBuy=t.side==='B';
+  const wallet=(isBuy?(t.users||[])[0]:(t.users||[])[1])||'';
+  if(!wallet||wallet.toLowerCase().replace('0x','').replace(/e/g,'')==='')return false;
+  if(wallet==='0x'+'e'.repeat(40))return false;
+  return true;
+}
+
+function processTrade(t){
+  if(!t||!t.coin||!active.has(t.coin))return;
+  // Debug: log semua field trade untuk 3 trade pertama
+  if(twapC<3){
+    console.log('TRADE DEBUG:',JSON.stringify({
+      coin:t.coin,hash:t.hash,tid:t.tid,
+      twapId:t.twapId,side:t.side,sz:t.sz,px:t.px,
+      keys:Object.keys(t)
+    }));
+  }
+  if(!isTWAP(t))return;
+  const name=COINS[t.coin]||t.coin;
+  const isBuy=t.side==='B';
+  const wallet=(isBuy?(t.users||[])[0]:(t.users||[])[1])||'unknown';
+  // Group per wallet+side (bukan per coin) — 1 TWAP bisa cover banyak coin
+  const key=wallet+'_'+t.coin+'_'+t.side;
+  const now=Date.now();
+  const sz=parseFloat(t.sz);
+  if(!twapGroups[key]){
+    twapGroups[key]={wallet,coin:t.coin,side:t.side,count:0,totalSz:0,avgSz:0,
+      lastPx:t.px,firstTime:now,lastTime:now,intervals:[],prevTime:now};
+  }
+  const g=twapGroups[key];
+  if(g.count>0)g.intervals.push(now-g.prevTime);
+  g.prevTime=now;g.count++;g.totalSz+=sz;g.avgSz=g.totalSz/g.count;
+  g.lastPx=t.px;g.lastTime=now;
+  twapC++;if(isBuy)buyC++;else sellC++;
+  document.getElementById('bs-twap').textContent=twapC;
+  document.getElementById('bs-buy').textContent=buyC;
+  document.getElementById('bs-sell').textContent=sellC;
+  log('['+ts()+'] ⚡ TWAP '+(isBuy?'▲ BUY ':'▼ SELL')+'  '+name.padEnd(8)+'  sz: '+fmt(sz).padStart(12)+'  px: $'+parseFloat(t.px).toFixed(6),(isBuy?'buy':'sell'));
+  showAlert(name,t.side,sz,t.px);
+  switchTab('twap');
+  renderTWAP();
+}
+
+function renderTWAP(){
+  const el=document.getElementById('twap-content');
+  const now=Date.now();
+  const all=Object.values(twapGroups).map(g=>{
+    const avgInt=g.intervals.length?g.intervals.reduce((a,b)=>a+b,0)/g.intervals.length:30000;
+    return{...g,active:now-g.lastTime<Math.max(avgInt*2,30000)};
+  }).sort((a,b)=>{if(a.active!==b.active)return b.active-a.active;return b.lastTime-a.lastTime;});
+  if(!all.length){
+    el.innerHTML='<div class="empty-state"><div style="font-size:28px">🔍</div><div>Tidak ada TWAP terdeteksi</div><div style="font-size:10px">Hash 0x000 terdeteksi otomatis</div></div>';
+    return;
+  }
+  el.innerHTML=all.map(g=>{
+    const isBuy=g.side==='B';
+    const col=isBuy?'#26a69a':'#ff2255';
+    const name=COINS[g.coin]||g.coin;
+    const avgPx=parseFloat(g.lastPx);
+    const totalUsd=g.totalSz*avgPx;
+    const durMs=now-g.firstTime;
+    const durMin=Math.floor(durMs/60000);
+    const durSec=Math.floor((durMs%60000)/1000);
+    const durStr=durMin>0?durMin+'m '+durSec+'s':durSec+'s';
+    const avgInt=g.intervals.length?g.intervals.reduce((a,b)=>a+b,0)/g.intervals.length:30000;
+    const isActive=now-g.lastTime<Math.max(avgInt*2,30000);
+    const progPct=Math.min(100,durMs/3600000*100).toFixed(0);
+    const shortW=g.wallet.slice(0,6)+'...'+g.wallet.slice(-4);
+    return'<div class="twap-card '+(isBuy?'buy':'sell')+(isActive?'':' inactive')+'">'
+      +'<div class="card-head"><div class="card-side">'
+      +'<div class="side-dot '+(isBuy?'buy':'sell')+'" style="'+(isActive?'box-shadow:0 0 6px '+col:'')+'"></div>'
+      +'<span class="side-label '+(isBuy?'buy':'sell')+'">'+(isBuy?'BUY':'SELL')+'</span>'
+      +'<span class="coin-tag">'+name+'</span></div>'
+      +'<span style="font-size:10px;color:'+(isActive?'#f59e0b':'var(--text3)')+'">'+(isActive?'● Aktif':'○ Selesai')+'</span></div>'
+      +'<a class="card-wallet" href="https://hypurrscan.io/address/'+g.wallet+'#spot" target="_blank">'+shortW+' ↗</a>'
+      +'<div class="stats-grid">'
+      +'<div class="stat-box"><div class="stat-label">Total Size</div><div class="stat-val">'+fmt(g.totalSz)+' '+name+'</div></div>'
+      +'<div class="stat-box"><div class="stat-label">Total Value</div><div class="stat-val up">$'+fmtU(totalUsd)+'</div></div>'
+      +'<div class="stat-box"><div class="stat-label">Avg/Slice</div><div class="stat-val">$'+fmtU(g.avgSz*avgPx)+'</div></div>'
+      +'<div class="stat-box"><div class="stat-label">Last Price</div><div class="stat-val '+(isBuy?'buy':'sell')+'">$'+avgPx.toFixed(6)+'</div></div>'
+      +'<div class="stat-box full"><div class="stat-label">Slices</div><div class="stat-val">'+g.count+'x  |  ~'+Math.round(avgInt/1000)+'s/slice  |  '+durStr+'</div></div>'
+      +'</div>'
+      +'<div class="prog-wrap"><div class="prog-fill '+(isBuy?'':'sell')+'" style="width:'+progPct+'%"></div></div>'
+      +'</div>';
+  }).join('');
+}
+
+setInterval(renderTWAP,15000);
+
+function makeWS(id,coins,badgeId,retryRef,pingRef,aliveRef){
+  const badge=document.getElementById(badgeId);
+  if(retryRef.v===undefined)retryRef.v=0;
+
+  function conn(){
+    const ws=new WebSocket('wss://api.hyperliquid.xyz/ws');
+    if(id===1)ws1=ws;else ws2=ws;
+
+    ws.onopen=()=>{
+      retryRef.v=0;
+      if(id===1)alive1=true;else alive2=true;
+      badge.textContent='WS'+id+' live';badge.classList.add('live');
+      updateConnStatus();
+      log('['+ts()+'] WS'+id+' terhubung ('+coins.filter(c=>active.has(c)).length+' coin)','info');
+      const activeSubs=coins.filter(c=>active.has(c));
+      activeSubs.forEach((c,i)=>setTimeout(()=>{
+        if(ws.readyState===1)ws.send(JSON.stringify({method:'subscribe',subscription:{type:'trades',coin:c}}));
+      },i*1200));
+      if(pingRef.v)clearInterval(pingRef.v);
+      pingRef.v=setInterval(()=>{if(ws.readyState===1)ws.send(JSON.stringify({method:'ping'}));},20000);
+    };
+
+    ws.onmessage=(e)=>{
+      try{
+        const data=JSON.parse(e.data);
+        if(data.channel==='trades'&&data.data){
+          const trades=Array.isArray(data.data)?data.data:[data.data];
+          trades.forEach(t=>processTrade(t));
+        }
+      }catch(e){}
+    };
+
+    ws.onerror=()=>log('['+ts()+'] WS'+id+' error','err');
+
+    ws.onclose=()=>{
+      if(id===1)alive1=false;else alive2=false;
+      badge.textContent='WS'+id+' off';badge.classList.remove('live');
+      updateConnStatus();
+      if(pingRef.v){clearInterval(pingRef.v);pingRef.v=null;}
+      retryRef.v++;
+      const delay=Math.min(3000*retryRef.v,15000);
+      log('['+ts()+'] WS'+id+' terputus — reconnect '+delay/1000+'s...','warn');
+      setTimeout(conn,delay);
+    };
+  }
+  conn();
+}
+
+const r1ref={v:0},r2ref={v:0},p1ref={v:null},p2ref={v:null};
+setTimeout(()=>makeWS(1,GROUP1,'ws1-badge',r1ref,p1ref),500);
+setTimeout(()=>makeWS(2,GROUP2,'ws2-badge',r2ref,p2ref),12000);
+
+function updateMonitor(){document.getElementById('bs-mon').textContent=active.size;}
+
+function switchTab(t){
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+  document.querySelector('[data-t="'+t+'"]').classList.add('active');
+  document.getElementById('panel-'+t).classList.add('active');
+}
+
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>switchTab(t.dataset.t)));
+document.querySelectorAll('.cbtn').forEach(b=>b.addEventListener('click',()=>b.classList.toggle('on')));
+
+document.getElementById('fa-all').addEventListener('click',()=>document.querySelectorAll('.cbtn').forEach(b=>b.classList.add('on')));
+document.getElementById('fa-none').addEventListener('click',()=>document.querySelectorAll('.cbtn').forEach(b=>b.classList.remove('on')));
+document.getElementById('fa-apply').addEventListener('click',()=>{
+  const nw=new Set();
+  document.querySelectorAll('.cbtn.on').forEach(b=>nw.add(b.dataset.coin));
+  active=nw;updateMonitor();
+  log('['+ts()+'] Filter: '+active.size+' coin aktif','info');
+  switchTab('twap');
+});
+document.getElementById('bclear').addEventListener('click',()=>{
+  document.getElementById('log-out').innerHTML='';
+  log('['+ts()+'] Log dibersihkan','sys');
+});
+updateMonitor();
+</script>
+</body>
+</html>
